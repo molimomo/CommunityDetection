@@ -26,6 +26,7 @@ database = 'TwitterData'
 def updateCollection(db, user, data, isFollower):
 	original = db.collect1.find_one({'UserID':user})
 	if original != None:
+		print("Update Exist Document!")
 		if isFollower == True:
 			original['Followers'].append(followerList)
 			db.collect1.update_one({'UserID':user}, {'$set':{'Followers':original['Followers']}})
@@ -33,6 +34,7 @@ def updateCollection(db, user, data, isFollower):
 			original['Followings'].append(friendList)
 			db.collect1.update_one({'UserID':user}, {'$set':{'Followings':original['Followings']}})
 	else:
+		print("Insert New Document!")
 		if isFollower == True:
 			insertMongoDB(db, user, data, "Followers")
 		else:
@@ -58,7 +60,7 @@ def getFollowers(name):
 		try:
 			follower = next(followers)
 		except tweepy.TweepError:
-			updateDocument(db, name, followerList, True)
+			updateCollection(db, name, followerList, True)
 			del followList[:]
 			time.sleep(60 * 15)
 			return -1
@@ -94,6 +96,60 @@ def getFollowings(name):
 		print("- " + friend.screen_name)
 	#return friendList
 
+def getInfo(name):
+	user = api.get_user(name)
+	friends_ids = tweepy.Cursor(api.friends_ids, screen_name=name).items()
+	followers = tweepy.Cursor(api.followers, id=name).items()
+	isFollower = True
+	endFollower = False
+	endFollowing = False
+
+	while True:
+		print("Fetching Data...")
+		try:
+			if(isFollower == True):
+				if(endFollower==True)
+					friend_id = next(friends_ids)
+					friend = api.get_user(id=friend_id)
+				else
+					follower = next(followers)
+			else:
+				friend_id = next(friends_ids)
+				friend = api.get_user(id=friend_id)
+			
+	
+		except tweepy.TweepError:
+			if(isFollower == True):
+				updateCollection(db, name, followList, isFollower)
+				del followList[:]
+			else:
+				updateCollection(db, name, friendList, isFollower)
+				del friendList[:]
+			isFollower = ~isFollower
+			time.sleep(60 * 15)
+		except StopIteration:
+			if(isFollower == True):
+				updateCollection(db, name, followList, isFollower)
+				del followList[:]
+				endFollower = True
+			else:
+				updateCollection(db, name, friendList, isFollower)
+				del friendList[:]
+				endFollowing = True
+			isFollower = ~isFollower
+			print("Bye!")
+			break
+
+		print("Appending data")	
+		if(isFollower == True):
+			followerList.append(follower.screen_name)
+		else:
+			friendList.append(friend.screen_name)
+	
+
+
+
+
 # Traverse targets and list their followers and following users
 def main():
 	# Target List
@@ -104,16 +160,13 @@ def main():
 	
 	# Fetch data from Twitter and then store them into Mongo DB
 	for name in ids:
-		user = api.get_user(name)
-		friends_ids = tweepy.Cursor(api.friends_ids, screen_name=name).items()
-		followers = tweepy.Cursor(api.followers, id=name).items()
+		#user = api.get_user(name)
+		#friends_ids = tweepy.Cursor(api.friends_ids, screen_name=name).items()
+		#followers = tweepy.Cursor(api.followers, id=name).items()
 		print("Fetching information of user: " + name)
-		while True:
-			if(getFollowers(name)!=0):
-				if(getFollowings(name)!=0):
-					continue
-				continue
+		getInfo(name)
 		#followers = getFollowers(name)
+
 		#getFollowers(name)
 		#print("Follower Count: " + str(len(followerList)))
 		#for follower in followerList:
