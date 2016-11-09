@@ -5,10 +5,10 @@ import pymongo
 from pymongo import MongoClient
 
 # Authentication 
-CONSUMER_KEY = "IcwGFwvhCrnqhVCIZPFmt86KL"
-CONSUMER_SECRET = "dphQ4g30pQbJ6rlyS5rfsPLkCqbflwTDDNsPi4v7nOuvdj854L"
-ACCESS_KEY = "14324937-FuxISyvlNUw6tWrWiCAwLOoOpxR8MSP3xsWdeJLhM"
-ACCESS_SECRET = "guRlVWY7WRa6SDpUIMm6AWpJVt5zKn4Ssx3kMbisRUJNk"
+CONSUMER_KEY = ""
+CONSUMER_SECRET = ""
+ACCESS_KEY = ""
+ACCESS_SECRET = ""
 authid = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
 authid.set_access_token(ACCESS_KEY, ACCESS_SECRET)
 api = tweepy.API(authid)
@@ -24,22 +24,29 @@ followingCnt = 0
 # Target Database
 database = 'TwitterData'
 
+
+def updateList(db, targetDoc, name, targetField, updateData):
+	db.collect1.update({targetDoc:name},{'$push':{targetField:{'$each':updateData}}})
+	
 def updateCollection(db, user, data, isFollower):
 	original = db.collect1.find_one({'UserID':user})
 	if original != None:
 		if isFollower == True:
 			if "Followers" in original:
 				print("Update Followers!")
-				original['Followers'].append(followerList)
-				db.collect1.update_one({'UserID':user}, {'$set':{'Followers':original['Followers']}})
+				updateList(db,'UserID', user, 'Followers', followerList)
+				#original['Followers'].append(followerList)
+				#db.collect1.update_one({'UserID':user}, {'$set':{'Followers':original['Followers']}})
 			else:
 				db.collect1.update_one({'UserID':user}, {'$set':{'Followers':data}})
 		else:
 			if "Followings" in original:
 				print("Update Followings!")
-				original['Followings'].append(friendList)
-				db.collect1.update_one({'UserID':user}, {'$set':{'Followings':original['Followings']}})
+				updateList(db,'UserID', user, 'Followings', friendList)
+				#original['Followings'].append(friendList)
+				#db.collect1.update_one({'UserID':user}, {'$set':{'Followings':original['Followings']}})
 			else:
+				print("insert new following")
 				db.collect1.update_one({'UserID':user}, {'$set':{'Followings':data}})
 	else:
 		print("Insert New Document!")
@@ -60,15 +67,25 @@ def connectMongoDB(database):
 	db = client[database]
 	return db
 
+# Get followers / followings from a given user ID
 def getInfo(name):
+	
+	# Get user information
 	user = api.get_user(name)
+
+	# Get user's following list (ID) 
 	friends_ids = tweepy.Cursor(api.friends_ids, screen_name=name).items()
+
+	# Get user's follower list
 	followers = tweepy.Cursor(api.followers, id=name).items()
+
 	isFollower = True
 	endFollower = False
 	endFollowing = False
-
+	global followerList
+	global friendList
 	while True:
+		# Get next follower/following from user's list
 		try:
 			if(isFollower == True):
 				if(endFollower == True and endFollowing == False):
@@ -87,17 +104,26 @@ def getInfo(name):
 					friend_id = next(friends_ids)
 					friend = api.get_user(id=friend_id)
 
+		# (Exception) Reach the twitter rate limit
 		except tweepy.TweepError:
+			# insert current user list into Database	
 			if(isFollower == True):
 				updateCollection(db, name, followerList, isFollower)
 				del followerList[:]
 			else:
+				print("Hello?")
 				updateCollection(db, name, friendList, isFollower)
 				del friendList[:]
 			print("Waiting for rate limit...")
-			isFollower = ~isFollower
-			time.sleep(60 * 15)
 
+			# Switch collection target
+			isFollower = ~isFollower
+
+			# Wait for 15 minutes
+			time.sleep(60 * 15)
+			continue
+
+		# (Exception) Reach the end of followers or followings
 		except StopIteration:
 			if(isFollower == True):
 				updateCollection(db, name, followerList, isFollower)
@@ -113,7 +139,8 @@ def getInfo(name):
 				break
 			else:
 				continue
-
+		
+		# If there is no exception, add userId into list
 		if(isFollower == True):
 			global followerCnt
 			global followingCnt
@@ -128,10 +155,8 @@ def getInfo(name):
 # Traverse targets and list their followers and following users
 def main():
 	# Target List
-	#ids=['molimomo']
-	ids=['molimomo', 'AngenZheng']
 	#ids=['lfc', 'chelseafc','arsenal','spursoffical','ManUtd']
-	#ids=['arsenal']	
+	ids=['lfc']	
 	
 	# Fetch data from Twitter and then store them into Mongo DB
 	for name in ids:
